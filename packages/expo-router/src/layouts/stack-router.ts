@@ -142,8 +142,15 @@ export const stackRouterOverride: NonNullable<NativeStackNavigatorProps['UNSTABL
           } else if (action.type === 'NAVIGATE') {
             const currentRoute = activeRoutes[state.index]!;
 
+            // A preview navigation must adopt the route that the peek preloaded. Skip the
+            // current route only when this navigator holds that preloaded route, otherwise
+            // a nested navigator that already shows the destination pushes a duplicate.
+            const adoptsPreloadedRoute =
+              isPreviewAction(action) &&
+              preloadedRoutes.some((route) => route.name === action.payload.name);
+
             // If the route matches the current one, then navigate to it
-            if (action.payload.name === currentRoute.name && !isPreviewAction(action)) {
+            if (action.payload.name === currentRoute.name && !adoptsPreloadedRoute) {
               route = currentRoute;
             } else if (action.payload.pop) {
               route = activeRoutes.findLast((route) => route.name === action.payload.name);

@@ -2,6 +2,7 @@ import { screen, act, waitFor, fireEvent, render } from '@testing-library/react-
 import React from 'react';
 import { Button, Platform, Text, View } from 'react-native';
 
+import { store } from '../../global-state/router-store';
 import { useLocalSearchParams, useRouter } from '../../hooks';
 import { router } from '../../imperative-api';
 import Stack from '../../layouts/Stack';
@@ -1141,6 +1142,97 @@ describe('Preview', () => {
       ).toMatch(/slotB\/\[xyz\]-[-\w]+/);
     });
   });
+  describe('preview navigation commit', () => {
+    /** Every route key in the whole navigation tree whose route name is `name`. */
+    function routeKeysNamed(state: unknown, name: string, acc: string[] = []): string[] {
+      const routes = (state as { routes?: unknown[] } | undefined)?.routes;
+      if (!Array.isArray(routes)) {
+        return acc;
+      }
+      for (const route of routes) {
+        const r = route as { name?: string; key?: string; state?: unknown };
+        if (r.name === name && r.key) {
+          acc.push(r.key);
+        }
+        routeKeysNamed(r.state, name, acc);
+      }
+      return acc;
+    }
+
+    /** Peek (prefetch + wait for the preloaded screen id) and then commit the preview. */
+    async function peekAndCommit() {
+      const nativeLinkPreview = require('../preview/native').NativeLinkPreview;
+      const emitters = require('../preview/native').__EVENTS__;
+      act(() => emitters['link-onWillPreviewOpen']());
+      // The preloaded screen id arrives a tick after the prefetch. The tap must wait for it,
+      // because it is what marks the navigation as a preview commit.
+      await waitFor(() => {
+        const calls = nativeLinkPreview.mock.calls;
+        expect(calls[calls.length - 1][0].nextScreenId).toBeDefined();
+      });
+      act(() => emitters['link-onPreviewTapped']());
+    }
+
+    it('when the destination is a sibling in the same stack, it adopts the preloaded route', async () => {
+      renderRouter({
+        _layout: () => <Stack />,
+        index: () => (
+          <Link href="/detail">
+            <Link.Trigger>Peek</Link.Trigger>
+            <Link.Preview />
+          </Link>
+        ),
+        detail: () => <View testID="detail" />,
+      });
+
+      await peekAndCommit();
+
+      expect(screen.getByTestId('detail')).toBeVisible();
+      expect(routeKeysNamed(store.state, 'detail')).toHaveLength(1);
+    });
+
+    it('when the destination is inside a nested group, it adopts the preloaded route', async () => {
+      renderRouter({
+        _layout: () => <Stack />,
+        index: () => (
+          <Link href="/(modals)/group-detail">
+            <Link.Trigger>Peek</Link.Trigger>
+            <Link.Preview />
+          </Link>
+        ),
+        '(modals)/_layout': () => <Stack />,
+        '(modals)/group-detail': () => <View testID="group-detail" />,
+      });
+
+      await peekAndCommit();
+
+      expect(screen.getByTestId('group-detail')).toBeVisible();
+      // The nested stack must hold one `group-detail`. Before this was fixed the commit kept
+      // the preloaded route and pushed a preview-flagged copy on top of it, so going back
+      // landed on the leftover copy instead of the previous screen.
+      expect(routeKeysNamed(store.state, 'group-detail')).toHaveLength(1);
+    });
+
+    it('when the destination has the same route name as the current screen, it pushes the preloaded route', () => {
+      renderRouter({
+        _layout: () => <Stack />,
+        index: () => <View testID="index" />,
+        '[x]': () => <View testID="x" />,
+      });
+      act(() => router.push('/123'));
+
+      // The two calls a peek and a tap make. `__internal__PreviewKey` marks the navigation
+      // as a preview commit; the router only reads whether it is set.
+      act(() => router.prefetch('/321'));
+      act(() => router.navigate('/321', { __internal__PreviewKey: 'preview-key' }));
+
+      // `/123` and `/321` are two screens of the same route. The commit must not collapse
+      // them into one, or the JS stack desyncs from the screen the native side pushed.
+      expect(routeKeysNamed(store.state, '[x]')).toHaveLength(2);
+      expect(screen).toHavePathname('/321');
+    });
+  });
+
   describe('external links in preview', () => {
     it('when link preview is used with external href and no context menu is added, then normal link is rendered', () => {
       renderRouter({
