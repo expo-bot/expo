@@ -40,6 +40,31 @@ function getFontFaceRules(): RuleItem[] {
   return [];
 }
 
+// Browsers disagree about how they expose the descriptors of a `@font-face` rule.
+// The camel-case accessors are not always there: `rule.style.fontFamily` is `undefined`
+// on Firefox 142, and defined on Firefox 153. `getPropertyValue` returns the descriptor
+// in every browser.
+function getFontFaceDescriptor(rule: CSSFontFaceRule, descriptor: string): string {
+  return rule.style.getPropertyValue(descriptor);
+}
+
+// Browsers also disagree about the quotes around a family name. We always write the
+// name quoted, Firefox keeps the quotes, and Chromium and WebKit only keep them for a
+// name that needs them, such as a name with a space. `"MyFont"` and `MyFont` name the
+// same family, so the quotes have to go before we compare the name.
+function unquoteFontFamilyName(value: string): string {
+  const name = value.trim();
+  const quote = name[0];
+  if (name.length > 1 && (quote === '"' || quote === "'") && name.endsWith(quote)) {
+    return name.slice(1, -1).replace(/\\(.)/g, '$1');
+  }
+  return name;
+}
+
+function getFontFaceRuleFamilyName(rule: CSSFontFaceRule): string {
+  return unquoteFontFamilyName(getFontFaceDescriptor(rule, 'font-family'));
+}
+
 function getFontFaceRulesMatchingResource(
   fontFamilyName: string,
   options?: UnloadFontOptions
@@ -47,8 +72,10 @@ function getFontFaceRulesMatchingResource(
   const rules = getFontFaceRules();
   return rules.filter(({ rule }) => {
     return (
-      rule.style.fontFamily === fontFamilyName &&
-      (options && options.display ? options.display === (rule.style as any).fontDisplay : true)
+      getFontFaceRuleFamilyName(rule) === fontFamilyName &&
+      (options && options.display
+        ? options.display === getFontFaceDescriptor(rule, 'font-display')
+        : true)
     );
   });
 }
@@ -98,7 +125,7 @@ const ExpoFontLoader: Required<ExpoFontLoaderModule> = {
       return getLoadedServerFonts();
     }
     const rules = getFontFaceRules();
-    return rules.map(({ rule }) => rule.style.fontFamily);
+    return rules.map(({ rule }) => getFontFaceRuleFamilyName(rule));
   },
 
   isLoaded(fontFamilyName: string, resource: UnloadFontOptions = {}): boolean {
