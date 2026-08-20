@@ -20,6 +20,7 @@
 - [iOS] Fix SIGABRT during log purge when the persistent log contains a truncated line: `UpdatesLogReader` guarded on UTF-8 byte length but advanced the string index by Characters, so a line holding only the multi-byte emoji log prefix trapped with "String index is out of bounds". ([#48222](https://github.com/expo/expo/pull/48222) by [@valinagacevschi](https://github.com/valinagacevschi))
 - [Android] Fix SIGABRT when loading a development server URL that has no path (e.g. `http://192.168.1.2:8081`): Android's `URI.resolve` omits the path separator for an empty-path base, so the first segment of a relative asset URL was spliced onto the port and the resulting authority failed to parse. ([#48625](https://github.com/expo/expo/pull/48625) by [@tsapeta](https://github.com/tsapeta))
 - Reject updates whose asset key or file extension contains a path separator, which previously let a manifest write and delete files outside the updates directory. ([#48762](https://github.com/expo/expo/pull/48762), [#48763](https://github.com/expo/expo/pull/48763) by [@alanjhughes](https://github.com/alanjhughes))
+- [iOS] Fix `expo-dev-client` detection in `EXUpdates.podspec`: a failed `node --print` resolution returned an empty string, and `File.dirname("")` returned `"."`, so `use_dev_client` was always true. This added `-DUSE_DEV_CLIENT` to Debug builds of projects without a dev client, and printed a `MODULE_NOT_FOUND` stack trace during `pod install`.
 
 ### 💡 Others
 
