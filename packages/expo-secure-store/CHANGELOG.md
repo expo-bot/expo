@@ -10,7 +10,7 @@
 
 ### 🐛 Bug fixes
 
-- [iOS] Reject `deleteItemAsync` when the keychain refuses the delete, instead of resolving as if the item was removed.
+- [iOS] Reject `deleteItemAsync` when the keychain refuses the delete, instead of resolving as if the item was removed. ([#49146](https://github.com/expo/expo/pull/46089) by [@expo-bot](https://github.com/expo-bot))
 
 ### 💡 Others
 
