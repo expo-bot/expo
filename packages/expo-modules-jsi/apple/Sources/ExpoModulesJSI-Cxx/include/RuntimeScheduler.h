@@ -45,12 +45,19 @@ private:
   std::atomic<int> refCount{1};
 
 public:
+  // Don't annotate the constructors with SWIFT_RETURNS_RETAINED or
+  // SWIFT_RETURNS_UNRETAINED — those describe functions that *return* a
+  // SWIFT_SHARED_REFERENCE type. Swift already imports a constructor of such a
+  // type as returning an owned (+1) reference, which is what `refCount` starting
+  // at 1 expects. Swift 6.2 rejects the annotation with an error and Swift 6.3
+  // warns that it should not be there.
+
   /**
    Constructs a scheduler bound to a host-provided native RuntimeScheduler.
    `scheduleTask` dispatches through `fn`, which the host implements against
    the real react::RuntimeScheduler.
    */
-  SWIFT_RETURNS_RETAINED RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept
+  RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept
       : nativeScheduler(scheduler), scheduleFn(fn) {}
 
   /**
@@ -58,7 +65,7 @@ public:
    caller's thread — intended for standalone runtimes (e.g. tests) that have
    no React scheduler.
    */
-  SWIFT_RETURNS_RETAINED RuntimeScheduler() {}
+  RuntimeScheduler() {}
 
   RuntimeScheduler(const RuntimeScheduler &) = delete;
 
