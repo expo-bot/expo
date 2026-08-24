@@ -23,6 +23,7 @@
 - [iOS] Fix `'React/RCTBridge.h' file not found` with `ios.useFrameworks: "dynamic"` by reverting the dynamic-framework linkage guard from [#47500](https://github.com/expo/expo/pull/47500). Under `:dynamic` linkage every pod target is already a dynamic framework, so the guard skipped the whole `USE_FRAMEWORKS` downgrade. `@rnmapbox/maps` 10.3.2 no longer needs the guard because it skips its own dynamic flip when precompiled modules are enabled. ([#48869](https://github.com/expo/expo/pull/48869) by [@kudo](https://github.com/kudo))
 - [iOS] Pull a 3rd-party pod's prebuilt XCFramework to source when a dependent 3rd-party pod builds from source, fixing `'worklets/Compat/StableApi.h' file not found`. ([#49147](https://github.com/expo/expo/pull/49147) by [@chrfalch](https://github.com/chrfalch))
 - Respect explicit per-platform `null` overrides from project `react-native.config.js` files ([#47545](https://github.com/expo/expo/pull/47545) by [@chownation](https://github.com/chownation))
+- [iOS] Build a module from source instead of linking the prebuilt XCFrameworks bundled in its npm package when they were compiled against a different React Native version, and print which versions disagree. The bundled path carries no version, so `pod install` previously linked them against any React Native, which corrupts memory at runtime instead of failing to build.
 
 ### 💡 Others
 

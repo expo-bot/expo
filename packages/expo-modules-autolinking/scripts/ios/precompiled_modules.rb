@@ -62,6 +62,10 @@ module Expo
     # Subdir inside an npm package that bundles shared SPM xcframeworks for standalone consumers.
     BUNDLED_SHARED_SPM_DEPS_SUBPATH = File.join('prebuilds', 'spm-deps').freeze
 
+    # Written next to the prebuilds bundled in an npm package, recording the React Native
+    # version they were compiled against. See tools/src/publish-packages/tasks/bundleIOSPrebuilds.ts.
+    BUNDLED_PREBUILDS_METADATA_FILENAME = 'metadata.json'.freeze
+
     # Apple platforms supported by CocoaPods podspecs
     APPLE_PLATFORMS = %w[ios osx tvos watchos visionos].freeze
 
@@ -91,6 +95,7 @@ module Expo
     @prebuilt_dependent_pods = nil      # Hash: pod_name -> pods declaring it as a dependency
     @failed_remote_downloads = Set.new
     @warned_no_prebuilt_react = false
+    @warned_bundled_prebuilds_skew = Set.new # npm packages already warned about a React Native skew
     @target_platform = nil
     @xcframework_slice_cache = nil
     @status_cache = {}                  # Hash: pod_name -> resolve_prebuilt_status result
@@ -1701,7 +1706,8 @@ module Expo
 
             if bundled_versioned_dir && File.directory?(bundled_versioned_dir)
               build_output_dir = bundled_versioned_dir
-            elsif File.directory?(bundled_flat_dir)
+            elsif File.directory?(bundled_flat_dir) &&
+                  bundled_prebuilds_compatible?(bundled_flat_dir, npm_package)
               build_output_dir = bundled_flat_dir
             end
           end
@@ -1782,7 +1788,8 @@ module Expo
 
         # Fallback: check for prebuilds bundled inside the package directory (shipped in npm)
         bundled_output_dir = File.join(package_dir, 'prebuilds', 'output')
-        if !File.directory?(build_output_dir) && File.directory?(bundled_output_dir)
+        if !File.directory?(build_output_dir) && File.directory?(bundled_output_dir) &&
+           bundled_prebuilds_compatible?(bundled_output_dir, npm_package)
           build_output_dir = bundled_output_dir
         end
 
@@ -2119,6 +2126,36 @@ module Expo
         hermes_ver = hermes_version
         return nil unless package_version && rn_ver && hermes_ver
         File.join(package_version, rn_ver, hermes_ver)
+      end
+
+      # Returns true when the prebuilds bundled at `bundled_output_dir` may be linked into
+      # this project. The path of a bundled prebuild carries no version, so the publish
+      # pipeline records the React Native version it was compiled against in
+      # `<bundled_output_dir>/metadata.json`. React Native's C++ types are not ABI-stable
+      # between releases, so a prebuilt binary compiled against another React Native links
+      # without an error and corrupts memory at runtime.
+      # Packages published before this metadata existed keep the previous behavior.
+      def bundled_prebuilds_compatible?(bundled_output_dir, npm_package)
+        metadata_path = File.join(bundled_output_dir, BUNDLED_PREBUILDS_METADATA_FILENAME)
+        return true unless File.file?(metadata_path)
+
+        compiled_rn_version = JSON.parse(File.read(metadata_path))['reactNativeVersion']
+        installed_rn_version = react_native_version
+        return true if compiled_rn_version.nil? || installed_rn_version.nil?
+        return true if compiled_rn_version == installed_rn_version
+
+        warn_bundled_prebuilds_skew(npm_package, compiled_rn_version, installed_rn_version)
+        false
+      rescue StandardError => e
+        Pod::UI.warn "[Expo-precompiled] Failed to read #{metadata_path}: #{e.message}"
+        true
+      end
+
+      # Prints the React Native skew once per npm package.
+      def warn_bundled_prebuilds_skew(npm_package, compiled_rn_version, installed_rn_version)
+        return unless @warned_bundled_prebuilds_skew.add?(npm_package)
+
+        Pod::UI.warn "[Expo-precompiled] #{npm_package} ships prebuilt XCFrameworks that were compiled against react-native #{compiled_rn_version}, but this project has react-native #{installed_rn_version} installed. React Native's C++ types are not ABI-stable between releases, so linking them would corrupt memory at runtime instead of failing to build. #{npm_package} is built from source for this install. That is slower, but it is correct. To link the prebuilt binaries again, install the react-native version that `node_modules/expo/bundledNativeModules.json` pins, then run `pod install` again."
       end
 
       # ──────────────────────────────────────────────────────────────────────

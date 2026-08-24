@@ -8,7 +8,7 @@ import logger from '../../Logger';
 import { Task } from '../../TasksRunner';
 import { runWithSpinner, spawnAsync } from '../../Utils';
 import { runPrebuildPackagesAsync } from '../../commands/PrebuildPackages';
-import { IOS_PREBUILD_PACKAGES } from '../../prebuilds/Utils';
+import { getVersionsInfoAsync, IOS_PREBUILD_PACKAGES } from '../../prebuilds/Utils';
 import { CommandOptions, Parcel, TaskArgs } from '../types';
 import { loadRequestedParcels } from './loadRequestedParcels';
 
@@ -104,6 +104,12 @@ const FLAVORS = ['debug', 'release'] as const;
 // Resolver: precompiled_modules.rb's shared_spm_dep_source_base.
 const SHARED_SPM_DEPS_SOURCE_DIR = '.spm-deps';
 const SHARED_SPM_DEPS_BUNDLE_SUBPATH = path.join('prebuilds', 'spm-deps');
+
+// Records the React Native version the bundled prebuilds were compiled against. The bundled
+// path carries no version, so `pod install` reads this file to decline binaries built against
+// another React Native instead of linking them and corrupting memory at runtime.
+// Reader: precompiled_modules.rb's bundled_prebuilds_compatible?.
+const BUNDLED_PREBUILDS_METADATA_FILENAME = 'metadata.json';
 
 /**
  * Prompts before removing module prebuild caches. Mirrors `cleanupStaleBuildDirectories` on
@@ -294,6 +300,8 @@ export const bundleIOSPrebuilds = new Task<TaskArgs>(
       // below only repopulates packages still in IOS_PREBUILD_PACKAGES.
       await clearBundledPrebuildsAsync(parcels);
 
+      const { reactNativeVersion } = await getVersionsInfoAsync({});
+
       // Copy built tarballs into each package's prebuilds/ directory
       for (const pkgName of IOS_PREBUILD_PACKAGES) {
         const parcel = parcels.find(
@@ -307,6 +315,7 @@ export const bundleIOSPrebuilds = new Task<TaskArgs>(
         await runWithSpinner(
           `Bundling iOS prebuilds into ${pkgName}`,
           async () => {
+            let bundledAnyFlavor = false;
             for (const flavor of FLAVORS) {
               const srcDir = path.join(
                 PRECOMPILE_BUILD_DIR,
@@ -334,8 +343,23 @@ export const bundleIOSPrebuilds = new Task<TaskArgs>(
               for (const file of files) {
                 if (file.endsWith('.tar.gz')) {
                   await fs.promises.copyFile(path.join(srcDir, file), path.join(destDir, file));
+                  bundledAnyFlavor = true;
                 }
               }
+            }
+
+            // Stamp the React Native version next to the tarballs, so `pod install` can tell
+            // whether they match the React Native installed in the consuming project.
+            if (bundledAnyFlavor) {
+              await fs.promises.writeFile(
+                path.join(
+                  parcel.pkg.path,
+                  'prebuilds',
+                  'output',
+                  BUNDLED_PREBUILDS_METADATA_FILENAME
+                ),
+                `${JSON.stringify({ reactNativeVersion }, null, 2)}\n`
+              );
             }
 
             await bundleSharedSpmDepsAsync(parcel.pkg.path);
