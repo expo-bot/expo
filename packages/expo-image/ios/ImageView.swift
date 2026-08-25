@@ -45,13 +45,31 @@ public final class ImageView: ExpoView {
 
   var pendingOperation: SDWebImageCombinedOperation?
 
+  /**
+   The source of the request that is currently in flight, if any.
+   */
+  private var loadingSource: ImageSource?
+
+  /**
+   Whether the next `reload()` must start a new request even when the source hasn't changed.
+   */
+  private var needsNewRequest: Bool = false
+
   var contentFit: ContentFit = .cover
 
   var contentPosition: ContentPosition = .center
 
   var transition: ImageTransition?
 
-  var blurRadius: CGFloat = 0.0
+  var blurRadius: CGFloat = 0.0 {
+    didSet {
+      // The blur is applied by a transformer while the image is loading,
+      // so a new radius has to be requested again.
+      if oldValue != blurRadius {
+        needsNewRequest = true
+      }
+    }
+  }
 
   var imageTintColor: UIColor?
 
@@ -163,6 +181,14 @@ public final class ImageView: ExpoView {
       return
     }
 
+    // `reload()` runs on every committed props update and on every bounds change, so without this
+    // check an unrelated animated prop (e.g. `opacity`) cancels the pending request on every frame
+    // and the image never loads. See https://github.com/expo/expo/issues/49346
+    if !force, !needsNewRequest, let loadingSource,
+      loadingSource.uri == source.uri, loadingSource.cacheKey == source.cacheKey {
+      return
+    }
+
     // Track if this is an SF Symbol source for animation handling
     isSFSymbolSource = source.isSFSymbol
 
@@ -206,6 +232,8 @@ public final class ImageView: ExpoView {
     }
 
     onLoadStart([:])
+    loadingSource = source
+    needsNewRequest = false
 
     pendingOperation = imageManager.loadImage(
       with: source.uri,
@@ -250,6 +278,7 @@ public final class ImageView: ExpoView {
       // SDWebImage throws an error when loading operation is canceled (interrupted) by another load request.
       // We do want to ignore that one and wait for the new request to load.
       if code != SDWebImageError.cancelled.rawValue {
+        loadingSource = nil
         onError(["error": error.localizedDescription])
       }
       return
@@ -258,6 +287,7 @@ public final class ImageView: ExpoView {
       log.debug("Loading the image has been canceled")
       return
     }
+    loadingSource = nil
 
     if let image {
       onLoad([
@@ -758,6 +788,7 @@ public final class ImageView: ExpoView {
   func cancelPendingOperation() {
     pendingOperation?.cancel()
     pendingOperation = nil
+    loadingSource = nil
   }
 
   /**
