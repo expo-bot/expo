@@ -87,13 +87,38 @@ function NavigationContainerInner(
 
   const [lastUnhandledLink, setLastUnhandledLink] = React.useState<string | undefined>();
 
+  // On Android `getInitialURL()` is asynchronous, so `useLinking` can report the initial
+  // link before this component commits. React warns about a state update on a fiber that
+  // has not mounted, so keep the link in a ref until the first effect runs.
+  const hasMountedRef = React.useRef(false);
+  const pendingUnhandledLinkRef = React.useRef<string | undefined>(undefined);
+
+  const onUnhandledLinking = useLatestCallback((link: string | undefined) => {
+    if (hasMountedRef.current) {
+      setLastUnhandledLink(link);
+    } else {
+      pendingUnhandledLinkRef.current = link;
+    }
+  });
+
+  React.useEffect(() => {
+    hasMountedRef.current = true;
+    if (pendingUnhandledLinkRef.current !== undefined) {
+      setLastUnhandledLink(pendingUnhandledLinkRef.current);
+      pendingUnhandledLinkRef.current = undefined;
+    }
+    return () => {
+      hasMountedRef.current = false;
+    };
+  }, []);
+
   const { getInitialState } = useLinking(
     refContainer,
     {
       prefixes: [],
       ...linking,
     },
-    setLastUnhandledLink
+    onUnhandledLinking
   );
 
   const linkingContext = React.useMemo(() => ({ options: linking }), [linking]);
