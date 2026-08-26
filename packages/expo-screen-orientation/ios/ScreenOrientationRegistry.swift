@@ -211,9 +211,18 @@ public class ScreenOrientationRegistry: NSObject, UIApplicationDelegate {
         self.currentScreenOrientation = newScreenOrientation
       }
     }
-    queue.async {
-      // Read without the barrier:
-      for controller in self.orientationControllers {
+    // Notify the controllers on the main thread, not on `queue`. A controller reads
+    // `currentOrientationMask`, which dispatches synchronously to the main thread. Running that
+    // on `queue` blocks `queue` until the main thread is free, while the main thread can be
+    // blocked in `requiredOrientationMask()` waiting for `queue`. That is a deadlock.
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else {
+        return
+      }
+      let controllers = self.queue.sync {
+        return self.orientationControllers
+      }
+      for controller in controllers {
         controller.screenOrientationDidChange(newScreenOrientation)
       }
     }
