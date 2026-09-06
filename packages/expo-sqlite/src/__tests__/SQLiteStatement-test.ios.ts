@@ -157,4 +157,55 @@ describe(SQLiteStatement, () => {
     expect(row?.intValue).toBe(123);
     await statement.finalizeAsync();
   });
+
+  it('should throw instead of returning the rows of a later run of the same statement', async () => {
+    const statement = await db.prepareAsync(
+      'SELECT * FROM test WHERE intValue >= ? ORDER BY intValue ASC'
+    );
+    const first = await statement.executeAsync<TestEntity>(123);
+    const second = await statement.executeAsync<TestEntity>(789);
+
+    // `first` no longer owns the statement cursor, so it must not step `second`'s rows.
+    await expect(first.getAllAsync()).rejects.toThrow(/prepared statement ran again/);
+
+    const secondRows = await second.getAllAsync();
+    expect(secondRows.map((row) => row.intValue)).toEqual([789]);
+    await statement.finalizeAsync();
+  });
+
+  it('should throw when a superseded result has to step the cursor for its first row', async () => {
+    const statement = await db.prepareAsync(
+      'SELECT * FROM test WHERE intValue > ? ORDER BY intValue ASC'
+    );
+    // No row matches, so `first` has no row of its own cached and must step the cursor.
+    const first = await statement.executeAsync<TestEntity>(1000);
+    await statement.executeAsync<TestEntity>(0);
+    await expect(first.getFirstAsync()).rejects.toThrow(/prepared statement ran again/);
+    await statement.finalizeAsync();
+  });
+
+  it('should still return the row it already fetched after the statement runs again', async () => {
+    const statement = await db.prepareAsync('SELECT * FROM test WHERE intValue = ?');
+    const first = await statement.executeAsync<TestEntity>(123);
+    const second = await statement.executeAsync<TestEntity>(789);
+
+    // `run` already returned each result its own first row, and serving it steps no cursor.
+    expect((await first.getFirstAsync())?.intValue).toBe(123);
+    expect((await second.getFirstAsync())?.intValue).toBe(789);
+    await statement.finalizeAsync();
+  });
+
+  it('should keep working when the same statement is run again after its result is read', async () => {
+    const statement = await db.prepareAsync(
+      'SELECT * FROM test WHERE intValue >= ? ORDER BY intValue ASC'
+    );
+    const first = await statement.executeAsync<TestEntity>(456);
+    const firstRows = await first.getAllAsync();
+    expect(firstRows.map((row) => row.intValue)).toEqual([456, 789]);
+
+    const second = await statement.executeAsync<TestEntity>(123);
+    const secondRows = await second.getAllAsync();
+    expect(secondRows.map((row) => row.intValue)).toEqual([123, 456, 789]);
+    await statement.finalizeAsync();
+  });
 });
