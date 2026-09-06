@@ -126,7 +126,33 @@ export function getRoutes(contextModule: RequireContext, options: Options): Rout
     crawlAndAppendInitialRoutesAndEntryFiles(rootNode, options);
   }
 
+  if (process.env.NODE_ENV === 'development') {
+    warnAboutLayoutsWithoutChildRoutes(rootNode);
+  }
+
   return rootNode;
+}
+
+/**
+ * A layout only renders the routes that are next to it. A layout without any child routes renders
+ * an empty screen, and it is still matched by its own URL, so it can become the screen that `/`
+ * opens. This is always a mistake, so warn about it in development.
+ */
+function warnAboutLayoutsWithoutChildRoutes(node: RouteNode) {
+  if (node.type !== 'layout') {
+    return;
+  }
+
+  if (node.children.length === 0) {
+    console.warn(
+      `Layout "${node.contextKey}" does not contain any child routes. A layout only renders route files that are next to it, so this layout renders an empty screen. Add a route file in the same directory, for example an "index" file, or delete the layout file.`
+    );
+    return;
+  }
+
+  for (const child of node.children) {
+    warnAboutLayoutsWithoutChildRoutes(child);
+  }
 }
 
 /**
@@ -920,10 +946,6 @@ function crawlAndAppendInitialRoutesAndEntryFiles(
   } else if (node.type === 'redirect') {
     node.entryPoints = [...new Set([...entryPoints, node.destinationContextKey!])];
   } else if (node.type === 'layout') {
-    if (!node.children) {
-      throw new Error(`Layout "${node.contextKey}" does not contain any child routes`);
-    }
-
     // Every node below this layout will have it as an entryPoint
     entryPoints = [...entryPoints, node.contextKey];
 

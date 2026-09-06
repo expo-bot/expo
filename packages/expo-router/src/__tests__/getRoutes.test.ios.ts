@@ -238,6 +238,66 @@ describe('tutorial', () => {
   });
 });
 
+describe('layouts without child routes', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    process.env.NODE_ENV = 'development';
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it(`warns for a layout that has no child routes`, () => {
+    getRoutes(
+      inMemoryContext({
+        _layout: () => null,
+        '(path)/_layout': () => null,
+        '(tabs)/_layout': () => null,
+        '(tabs)/profile': () => null,
+      })
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Layout "./(path)/_layout.js" does not contain any child routes')
+    );
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Layout "./(tabs)/_layout.js" does not contain any child routes')
+    );
+  });
+
+  it(`does not warn when every layout has child routes`, () => {
+    getRoutes(
+      inMemoryContext({
+        _layout: () => null,
+        '(tabs)/_layout': () => null,
+        '(tabs)/index': () => null,
+      })
+    );
+
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('does not contain any child routes')
+    );
+  });
+
+  it(`does not warn outside of development`, () => {
+    process.env.NODE_ENV = 'production';
+
+    getRoutes(
+      inMemoryContext({
+        _layout: () => null,
+        '(path)/_layout': () => null,
+      })
+    );
+
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('does not contain any child routes')
+    );
+  });
+});
+
 describe('duplicate routes', () => {
   it(`throws if there are duplicate routes`, () => {
     expect(() => {
