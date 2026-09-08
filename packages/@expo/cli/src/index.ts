@@ -12,6 +12,25 @@ if (boolish('EXPO_DEBUG', false) || /(^|[,\s])expo(:|\*|$)/.test(process.env.DEB
   process.env.LOG_DEBUG ??= '*';
 }
 
+declare global {
+  namespace NodeJS {
+    export interface Process {
+      isBun?: boolean;
+    }
+  }
+}
+
+// NOTE(@expo-bot): `@babel/core` replaces `Error.prepareStackTrace` with a wrapper that calls the
+// previous value as a plain function. Node and Bun both install a native default there, but only
+// Bun's rejects a first argument that is not a real `Error`. So once Babel has loaded, any
+// dependency that calls `Error.captureStackTrace()` on a plain object throws "First argument must
+// be an Error object". Clearing this first makes Babel fall back to its own JavaScript formatter.
+// See https://github.com/expo/expo/issues/49843
+if (process.isBun) {
+  // `@types/node` types this as required, but assigning `undefined` is how the default is restored.
+  (Error as { prepareStackTrace?: unknown }).prepareStackTrace = undefined;
+}
+
 const defaultCmd = 'start';
 
 export type Command = (argv?: string[]) => void;
