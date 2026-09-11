@@ -6,20 +6,13 @@
 
 ### 🎉 New features
 
-### 🐛 Bug fixes
-
-### 💡 Others
-
-## 58.0.0 — 2026-09-10
-
-### 🎉 New features
-
-- [iOS] Resolve React Native headers from the self-contained XCFrameworks that React Native 0.87 ships, extending React Native's module map coverage to the Expo pods during precompile and pod install. ([#47256](https://github.com/expo/expo/pull/47256) by [@chrfalch](https://github.com/chrfalch))
+- [iOS] Detect React Native versions that ship self-contained XCFrameworks (no VFS overlay) during precompile and pod install, falling back to the legacy VFS overlay integration on pre-0.87 versions. ([#47256](https://github.com/expo/expo/pull/47256) by [@chrfalch](https://github.com/chrfalch))
 - [Android] Set `CMAKE_OBJECT_PATH_MAX=1024` by default for the app and all library subprojects that build native code with CMake, so long object file paths (for example in pnpm monorepos on Windows) no longer fail the build. Configurable with the `expo.android.cmakeObjectPathMax` Gradle property. ([#47791](https://github.com/expo/expo/pull/47791) by [@ide](https://github.com/ide))
 - [Android] Support linking published Gradle plugins. ([#48334](https://github.com/expo/expo/pull/48334) by [@jakex7](https://github.com/jakex7))
 
 ### 🐛 Bug fixes
 
+- [Android] Declare the `EXPO_PUBLIC_*` environment variables, the project's `.env` files, and the `EXPO_NO_DOTENV` and `EXPO_NO_CLIENT_ENV_VARS` switches as inputs of the `createBundle*JsAndAssets` tasks, so a release build that only changes one of them re-bundles instead of reporting `UP-TO-DATE` and embedding the previous value. ([#49839](https://github.com/expo/expo/pull/49839) by [@expo-bot](https://github.com/expo-bot))
 - [iOS] Re-anchor the project-level `REACT_NATIVE_PATH` build setting to `$(SRCROOT)` when React Native's ccache integration is enabled, so the `CC`/`LD` ccache wrapper paths resolve in targets not integrated with CocoaPods (e.g. custom share or widget extensions), which previously failed with `unable to spawn process '/../../node_modules/react-native/scripts/xcode/ccache-clang.sh'`. ([#47596](https://github.com/expo/expo/pull/47596) by [@AbbanMustafa](https://github.com/AbbanMustafa))
 - [iOS] Fix `HEADER_SEARCH_PATHS` corruption for pod targets whose existing build setting is an array: interpolating the array into a string rendered it as `["…", "…"]`, producing unresolvable include paths. Surfaced as `'React/RCTSurfaceTouchHandler.h' file not found` when building `@expo/ui` with `use_frameworks! :linkage => :dynamic`. ([#48665](https://github.com/expo/expo/pull/48665) by [@Lanchez](https://github.com/Lanchez))
 - [Android] Fix autolinking pure C++ React Native modules published without `includesGeneratedCode: true`. ([#48514](https://github.com/expo/expo/pull/48514) by [@satya164](https://github.com/satya164))
@@ -36,7 +29,6 @@
 
 ### 💡 Others
 
-- [iOS] Extract the prebuilt-modules metadata scan into a product-resolution library with catalog and app-plan projections; standalone projects now resolve through the app's module resolution instead of erroring (ENG-25370). ([#49603](https://github.com/expo/expo/pull/49603) by [@chrfalch](https://github.com/chrfalch))
 - [iOS] Read the XCFramework `Info.plist` files out of a prebuilt tarball in a single `tar` pass instead of a listing pass plus one extract per plist, roughly halving the per-pod archive work during `pod install`. ([#49580](https://github.com/expo/expo/pull/49580) by [@chrfalch](https://github.com/chrfalch))
 - [iOS] Add a `prebuilt-metadata` command emitting the prebuilt-modules identity document (npm package ↔ pod ↔ product), verified field-by-field against the Ruby derivations fixture (ENG-25370 phase 1). ([#49335](https://github.com/expo/expo/pull/49335) by [@chrfalch](https://github.com/chrfalch))
 - [iOS] Add a derivations snapshot dump for precompiled modules (`EXPO_PRECOMPILED_DUMP` / `dump_precompiled_derivations.rb`) with a committed bare-expo fixture enforced by an e2e test, guarding the migration of these derivations to autolinking metadata. ([#49150](https://github.com/expo/expo/pull/49150) by [@chrfalch](https://github.com/chrfalch))
