@@ -8,6 +8,8 @@
 
 ### 🐛 Bug fixes
 
+- [iOS] Fixed `getAssetInfoAsync` settling its promise more than once for a Live Photo, which returned the temporary low-quality result and trapped the app on `expo-modules-jsi` older than 56.0.10.
+
 ### 💡 Others
 
 ## 58.0.0 — 2026-09-10

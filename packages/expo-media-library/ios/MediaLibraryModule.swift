@@ -383,18 +383,25 @@ public class MediaLibraryModule: Module, PhotoLibraryObserverHandler {
   private func handleLivePhoto(asset: PHAsset, shouldDownloadFromNetwork: Bool, result: [String: Any?], promise: Promise) {
     let livePhotoOptions = PHLivePhotoRequestOptions()
     livePhotoOptions.isNetworkAccessAllowed = shouldDownloadFromNetwork
+    // The default delivery mode is `.opportunistic`, which calls the result handler more than once:
+    // a temporary low-quality Live Photo first, then the full-quality one. Every call settles the
+    // promise, so ask for a single full-quality delivery and ignore any degraded result anyway.
+    livePhotoOptions.deliveryMode = .highQualityFormat
     var updatedResult = result
-      updatedResult["pairedVideoAsset"] = nil
+    updatedResult["pairedVideoAsset"] = nil
 
     PHImageManager.default()
-      .requestLivePhoto(for: asset, targetSize: PHImageManagerMaximumSize, contentMode: .aspectFit, options: livePhotoOptions) { livePhoto, _ in
-      guard let livePhoto = livePhoto,
-        let videoResource = PHAssetResource.assetResources(for: livePhoto)
-        .first(where: { $0.type == .pairedVideo }) else {
-        promise.resolve(updatedResult)
-        return
-      }
-      self.writePairedVideoAsset(videoResource: videoResource, asset: asset, result: updatedResult, promise: promise)
+      .requestLivePhoto(for: asset, targetSize: PHImageManagerMaximumSize, contentMode: .aspectFit, options: livePhotoOptions) { livePhoto, info in
+        if info?[PHImageResultIsDegradedKey] as? Bool == true {
+          return
+        }
+        guard let livePhoto = livePhoto,
+          let videoResource = PHAssetResource.assetResources(for: livePhoto)
+          .first(where: { $0.type == .pairedVideo }) else {
+          promise.resolve(updatedResult)
+          return
+        }
+        self.writePairedVideoAsset(videoResource: videoResource, asset: asset, result: updatedResult, promise: promise)
       }
   }
 
