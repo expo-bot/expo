@@ -8,6 +8,8 @@
 
 ### 🐛 Bug fixes
 
+- [Android] Fixed a crash (`You can't start or clear loads in RequestListener or Target callbacks`) when an image fails to load while its view is resized, by emitting `onError` outside of Glide's callback, as `onLoad` already does.
+
 ### 💡 Others
 
 ## 58.0.5 — 2026-09-23

@@ -38,10 +38,13 @@ class GlideRequestListener(
       ?.removeSuffix("\n call GlideException#logRootCauses(String) for more detail")
       ?: "Unknown error"
 
-    expoImageViewWrapper
-      .get()
-      ?.onError
-      ?.invoke(ImageErrorEvent(errorMessage))
+    // Emitting synchronously can re-enter Glide while it is still calling callbacks
+    // (e.g. a synchronous mount that resizes the view restarts the failed request).
+    expoImageViewWrapper.get()?.let { imageWrapper ->
+      imageWrapper.appContext.mainQueue.launch {
+        imageWrapper.onError.invoke(ImageErrorEvent(errorMessage))
+      }
+    }
 
     Log.e("ExpoImage", errorMessage)
     e?.logRootCauses("ExpoImage")
